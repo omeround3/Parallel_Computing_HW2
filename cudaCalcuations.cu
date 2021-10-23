@@ -1,11 +1,6 @@
-
-
-#include <cuda_runtime.h>
-#include "cuda_api.h"
 #include <stdio.h>
-
-
-#define MAXIMUM_THREADS 256
+#include <cuda_runtime.h>
+#include "cudaCalcuations.h"
 
 __global__ void histogram_calculator(int* arr, int* results, int size)
 {
@@ -47,10 +42,7 @@ int get_blocks_number(int block_size)
 	return sum_of_blocks;
 }
 
-
-
-
-int* calc_histogram_on_gpu(int* arr, int size)
+int* cuda_calculation(int* arr, int size)
 {
 	
 	cudaError_t cuda_status;

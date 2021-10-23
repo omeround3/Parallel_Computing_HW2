@@ -1,3 +1,16 @@
+/* 
+	This program will calculate an histogram of values that appear in the input (standard input). The calculation proceess involves MPI, OpenMP and CUDA.
+	
+	Input: integers between 0 to 255.
+	Output: the number of occurrences of each integer in the input.
+
+	For more information on this program and how to use instructions please read the README file.
+	
+	Contributors:
+	Omer Lev-Ron
+	Sam Media
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -155,7 +168,7 @@ int main(int argc, char **argv) {
 		histogram_cuda = calc_histogram_on_gpu(arr + omp_size, cuda_size);
 		if (histogram_cuda == NULL)
 		{
-			printf("failed to calc histogram using CUDA, aborting...\n");
+			printf("Failed to calcuate histogram using CUDA, aborting...\n");
 			MPI_Abort(MPI_COMM_WORLD, __LINE__);
 		}
 		// add result from cuda

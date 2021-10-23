@@ -1,4 +1,4 @@
 
-#define INPUT_RANGE 256
+/* Header file for cuda_api.cu file */
 
 int* calc_histogram_on_gpu(int*, int);

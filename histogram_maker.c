@@ -1,16 +1,3 @@
-/* 
-	This program will calculate an histogram of values that appear in the input (standard input). The calculation proceess involves MPI, OpenMP and CUDA.
-	
-	Input: integers between 0 to 255.
-	Output: the number of occurrences of each integer in the input.
-
-	For more information on this program and how to use instructions please read the README file.
-	
-	Contributors:
-	Omer Lev-Ron
-	Sam Media
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,167 +6,167 @@
 #include "cuda_api.h"
 #include "mpi.h"
 
-enum ranks { ROOT, WORKER };
+#define RANGE 255
 
-int** find_histogram(int *arr, int size, int* num_threads)
+enum ranks
 {
-	int **histograms = NULL;
+	ROOT,
+	WORKER
+};
+
+void free_struct(int **arr, int size)
+{
+	for (int i = 0; i < size; i++)
+	{
+		free(arr[i]);
+	}
+	free(arr);
+}
+
+int **get_histogram(int *arr, int size, int *threads_amount)
+{
+	int **histogram_list = NULL;
 
 #pragma omp parallel
 	{
-		int num;
-		int thread_num = omp_get_thread_num();
-		// allocate only one data structure
+		int thread_id = omp_get_thread_num();
+		int number;
+
 #pragma omp single
 		{
-			*num_threads = omp_get_num_threads();
-			histograms = (int**)malloc(*num_threads * sizeof(int*));
+			*threads_amount = omp_get_num_threads();
+			histogram_list = (int **)malloc(*threads_amount * sizeof(int *));
 		}
-		// allocate private histogram for each thread
-		histograms[thread_num] = (int*)calloc(INPUT_RANGE, sizeof(int));
+
+		histogram_list[thread_id] = (int *)calloc(RANGE, sizeof(int)); /* local instance */
 
 #pragma omp for
 		for (int i = 0; i < size; i++)
 		{
-			num = arr[i];
-			histograms[thread_num][num] += 1;
+			number = arr[i];
+			histogram_list[thread_id][number] += 1;
 		}
 	}
 
-	return histograms;
+	return histogram_list;
 }
 
-
-int* calc_histogram_with_reduction(int *arr, int size)
+int *histogram_reduction_calculation(int *arr, int size)
 {
-	int num_threads;
-	int* histogram = (int*)calloc(INPUT_RANGE, sizeof(int));
+	int threads_amount;
 	int sum = 0;
+	int *histogram = (int *)calloc(RANGE, sizeof(int));
 
-	int** histograms = find_histogram(arr, size, &num_threads);
+	int **histogram_list = get_histogram(arr, size, &threads_amount);
 
-	#pragma omp parallel for reduction (+:sum)
-	for (int i = 0; i < INPUT_RANGE; i++)
+#pragma omp parallel for reduction(+ \
+								   : sum)
+	for (int i = 0; i < RANGE; i++)
 	{
 		sum = 0;
-		for (int j = 0; j < num_threads; j++)
+		for (int j = 0; j < threads_amount; j++)
 		{
-			sum += histograms[j][i];
+			sum += histogram_list[j][i];
 		}
 		histogram[i] = sum;
 	}
-	// free data structure
-	for (int i = 0; i < num_threads; i++)
-	{
-		free(histograms[i]);
-	}
-	free(histograms);
+	free_struct(histogram_list, threads_amount);
 
 	return histogram;
 }
 
-int* calc_histogram(int *arr, int size)
+int *histogram_calculation(int *arr, int size)
 {
-	int num_threads;
-	int* histogram = (int*)calloc(INPUT_RANGE, sizeof(int));
-	int** histograms = find_histogram(arr, size, &num_threads);
+	int threads_amount;
+	int *histogram = (int *)calloc(RANGE, sizeof(int));
+	int **histogram_list = get_histogram(arr, size, &threads_amount);
 
-	#pragma omp for
-	for (int i = 0; i < INPUT_RANGE; i++)
+#pragma omp for
+	for (int i = 0; i < RANGE; i++)
 	{
-		for (int j = 0; j < num_threads; j++)
+		for (int j = 0; j < threads_amount; j++)
 		{
-			histogram[i] += histograms[j][i];
+			histogram[i] += histogram_list[j][i];
 		}
 	}
-	// free data structure
-	for (int i = 0; i < num_threads; i++)
-	{
-		free(histograms[i]);
-	}
-	free(histograms);
 
+	free_struct(histogram_list, threads_amount);
 	return histogram;
 }
 
+void print_array(int *arr)
+{
+	int count;
+	for (int i = 0; i < RANGE; i++)
+	{
+		count = arr[i];
+		if (count != 0)
+			printf("%d: %d\n", i, count);
+	}
+}
 
-int main(int argc, char **argv) {
-	int histogram[INPUT_RANGE];
-	int *arr;
-	int *histogram_omp, *histogram_cuda;
-	int i, num, count;
-	int my_rank, num_procs;
-	int omp_size, cuda_size;
-	int N, my_size, worker_size;
+int main(int argc, char **argv)
+{
+	int *omp_histogram, *cuda_histogram, *arr, *sum_of_sizes;
+	int proccess_rank, procceses_amount, size_omp, size_cuda, user_total_input, size, size_worker, user_input;
+	int histogram[RANGE];
 
 	MPI_Init(&argc, &argv);
-	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-	MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
-	
-	if (num_procs != 2) 
+	MPI_Comm_rank(MPI_COMM_WORLD, &proccess_rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &procceses_amount);
+
+	if (procceses_amount != 2)
 	{
-       	printf("number of processes must be 2, aborting...\n");
-       	MPI_Abort(MPI_COMM_WORLD, __LINE__);
-    	}
-	
-	if (my_rank == ROOT)
-	{
-		// read numbers from user
-		fscanf(stdin, "%d", &N);
-		arr = (int*)malloc(sizeof(int) * N);
-		for (i = 0; i < N; i++)
-		{
-			fscanf(stdin, " %d", &num);
-			arr[i] = num;
-		}
-		my_size = N / num_procs;
-		worker_size = N - my_size;
-		// send the worker his arr size
-		MPI_Send(&worker_size, 1, MPI_INT, WORKER, 0, MPI_COMM_WORLD);
-		// send the worker his arr data
-		MPI_Send(arr + my_size, worker_size, MPI_INT, WORKER, 0, MPI_COMM_WORLD);
-		// calc the historgam using OMP with reduction
-		histogram_omp = calc_histogram_with_reduction(arr, my_size);
-		// get result from the worker
-		MPI_Recv(histogram, INPUT_RANGE, MPI_INT, WORKER, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		// add result from worker
-		for (i = 0; i < INPUT_RANGE; i++)
-			histogram[i] += histogram_omp[i];
-		
-		// print final result
-		for (i = 0; i<INPUT_RANGE; i++)
-		{
-		 	count = histogram[i];
-			if (count != 0)
-				printf("%d: %d\n", i, count);
-		}
+		printf("Proccess number must be 2\n");
+		MPI_Abort(MPI_COMM_WORLD, __LINE__);
 	}
 
-	if (my_rank != ROOT)
+	if (proccess_rank == ROOT)
 	{
-		MPI_Recv(&my_size, 1, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		arr = (int*)malloc(sizeof(int)*my_size);
-		MPI_Recv(arr, my_size, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		omp_size = my_size / 2;
-		cuda_size = my_size - omp_size;
-		// calc the historgam using OMP 
-		histogram_omp = calc_histogram(arr, omp_size);
-		// calc the histogram using CUDA
-		histogram_cuda = calc_histogram_on_gpu(arr + omp_size, cuda_size);
-		if (histogram_cuda == NULL)
+		fscanf(stdin, "%d", &user_total_input);
+		arr = (int *)malloc(sizeof(int) * user_total_input);
+		for (int i = 0; i < user_total_input; i++)
 		{
-			printf("Failed to calcuate histogram using CUDA, aborting...\n");
+			fscanf(stdin, " %d", &user_input);
+			arr[i] = user_input;
+		}
+
+		size = user_total_input / procceses_amount;
+		size_worker = user_total_input - size;
+		MPI_Send(&size_worker, 1, MPI_INT, WORKER, 0, MPI_COMM_WORLD);
+		sum_of_sizes = arr + size;
+		MPI_Send(sum_of_sizes, size_worker, MPI_INT, WORKER, 0, MPI_COMM_WORLD);
+		omp_histogram = histogram_reduction_calculation(arr, size);
+		MPI_Recv(histogram, RANGE, MPI_INT, WORKER, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		for (int i = 0; i < RANGE; i++)
+			histogram[i] += omp_histogram[i];
+
+		print_array(histogram);
+	}
+
+	if (proccess_rank != ROOT)
+	{
+		MPI_Recv(&size, 1, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		arr = (int *)malloc(sizeof(int) * size);
+		MPI_Recv(arr, size, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		size_omp = size / 2;
+		size_cuda = size - size_omp;
+		sum_of_sizes = arr + size_omp;
+		cuda_histogram = calc_histogram_on_gpu(sum_of_sizes, size_cuda);
+		omp_histogram = histogram_calculation(arr, size_omp);
+		if (cuda_histogram == NULL)
+		{
+			printf("Cuda calculation Failed.\n");
 			MPI_Abort(MPI_COMM_WORLD, __LINE__);
 		}
-		// add result from cuda
-		for (i = 0; i<INPUT_RANGE; i++)
-			histogram_omp[i]+= histogram_cuda[i];
-		
-		MPI_Send(histogram_omp, INPUT_RANGE, MPI_INT, ROOT, 0, MPI_COMM_WORLD);
-		free(histogram_cuda);
+		for (int i = 0; i < RANGE; i++)
+			omp_histogram[i] += cuda_histogram[i];
+
+		MPI_Send(omp_histogram, RANGE, MPI_INT, ROOT, 0, MPI_COMM_WORLD);
+		free(cuda_histogram);
 	}
 	free(arr);
-	free(histogram_omp);
+	free(omp_histogram);
 	MPI_Finalize();
 	return 0;
 }

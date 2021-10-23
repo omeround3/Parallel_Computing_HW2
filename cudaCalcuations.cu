@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <cuda_runtime.h>
 #include "cudaCalcuations.h"
 
@@ -47,7 +48,7 @@ int* cuda_calculation(int* arr, int size)
 	
 	cudaError_t cuda_status;
 	bool error_flag = false;
-	char* error_msg = "";
+	char error_msg[50];
 	int* histogram = (int*)calloc(MAXIMUM_THREADS, sizeof(int));
 	int blocks_num;
 	int* arr_int = 0;
@@ -58,14 +59,14 @@ int* cuda_calculation(int* arr, int size)
 	if (cuda_status != cudaSuccess )
 	{
 		error_flag = true;
-		error_msg = "[ERROR] cuda Malloc";
+		strcpy(error_msg, "[ERROR] cuda Malloc\0");
 	}
 	
 	cuda_status = cudaMalloc((void**)&hist_cuda, sizeof(int) * MAXIMUM_THREADS);
 	if (cuda_status != cudaSuccess && !error_flag)
 	{
 		error_flag = true;
-		error_msg = "[ERROR] cuda Malloc";
+		strcpy(error_msg, "[ERROR] cuda Malloc\0");
 	}
 	
 	/* Copy from Host memory to CUDA Device memory */
@@ -73,7 +74,7 @@ int* cuda_calculation(int* arr, int size)
 	if (cuda_status != cudaSuccess && !error_flag)
 	{
 		error_flag = true;
-		error_msg = "[ERROR] cuda MemcpyHostToDevice";
+		strcpy(error_msg, "[ERROR] cuda MemcpyHostToDevice\0");
 	}
 	
 	
@@ -81,7 +82,7 @@ int* cuda_calculation(int* arr, int size)
 	if (cuda_status != cudaSuccess && !error_flag)
 	{
 		error_flag = true;
-		error_msg = "[ERROR] cuda MemcpyHostToDevice";
+		strcpy(error_msg, "[ERROR] cuda MemcpyHostToDevice\0");
 	}
 	
 	blocks_num = get_blocks_number(size);
@@ -91,14 +92,14 @@ int* cuda_calculation(int* arr, int size)
 	if (cuda_status != cudaSuccess && !error_flag)
 	{
 		error_flag = true;
-		error_msg = "[ERROR] cuda DeviceSynchronize";
+		strcpy(error_msg, "[ERROR] cuda DeviceSynchronize\0");
 	}
 	
 	cuda_status = cudaMemcpy(histogram, hist_cuda, sizeof(int) * MAXIMUM_THREADS, cudaMemcpyDeviceToHost);
 	if (cuda_status !=  cudaSuccess && !error_flag)
 	{
 		error_flag = true;
-		error_msg = "[ERROR] cuda MemcpyDeviceToHost";
+		strcpy(error_msg, "[ERROR] cuda MemcpyDeviceToHost\0");
 	}
 
 	if (error_flag == true) {

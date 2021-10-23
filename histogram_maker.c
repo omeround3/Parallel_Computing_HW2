@@ -121,6 +121,7 @@ void print_results(int *arr)
 
 int main(int argc, char **argv)
 {
+
 	int *omp_histogram, *cuda_histogram, *arr, *half_of_array;
 	int proccess_rank, procceses_amount, size_omp, size_cuda, user_total_input, size, size_worker, user_input;
 	int histogram[RANGE];
@@ -128,6 +129,7 @@ int main(int argc, char **argv)
 	MPI_Init(&argc, &argv);
 	MPI_Comm_rank(MPI_COMM_WORLD, &proccess_rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &procceses_amount);
+	double start = MPI_Wtime();
 
 	if (procceses_amount != 2)
 	{
@@ -159,6 +161,9 @@ int main(int argc, char **argv)
 			histogram[i] += omp_histogram[i];
 
 		print_results(histogram);
+		
+		double end = MPI_Wtime();
+		printf("Execution time is %f\n", end - start ); 
 	}
 	else
 	{
@@ -190,7 +195,7 @@ int main(int argc, char **argv)
 		MPI_Send(omp_histogram, RANGE, MPI_INT, ROOT, 0, MPI_COMM_WORLD);
 		free(cuda_histogram);
 	}
-
+	
 	free(omp_histogram);
 	free(arr);
 
